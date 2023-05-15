@@ -162,3 +162,4 @@ cython_debug/
 
 #user_data
 user_photo.jpg
+userData.db
