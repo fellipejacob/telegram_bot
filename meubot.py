@@ -10,12 +10,14 @@ from telegram.ext import (
 )
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
+import hashlib
+
 
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-NAME, DOCUMENT_NUMBER, DOCUMENT_NUMBER_EXCLUDE, DOCUMENT_NUMBER_UPDATE, NAME_UPDATE = range(5)
+NAME, DOCUMENT_NUMBER, DOCUMENT_NUMBER_EXCLUDE, DOCUMENT_NUMBER_UPDATE, NAME_UPDATE, PASSWORD = range(6)
 
 Base = declarative_base()
 
@@ -23,12 +25,12 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
-    chat_id = Column(Integer)
     name = Column(String)
     document_number = Column(String)
+    password = Column(String)
 
     def __repr__(self):
-        return f"<User(chat_id='{self.chat_id}', name='{self.name}', DocumentNumber ='{self.document_number}')>"
+        return f"<User(name='{self.name}', DocumentNumber ='{self.document_number}', password ='{self.password}')>"
 
 
 engine = create_engine('sqlite:///userData.db')
@@ -60,7 +62,7 @@ async def document_number(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     session.close()
 
     if existing_user:
-        await update.message.reply_text("Você já está registrado no nosso sistema.")
+        await update.message.reply_text("Você já está cadastrado no nosso sistema. Por favor escolha outra função.")
         return ConversationHandler.END
 
     # Store the document number in user_data
@@ -72,22 +74,36 @@ async def document_number(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the user's name and checks if they are already registered."""
+    """Stores the user's name and prompts for the password."""
     user = update.message.from_user
     name = update.message.text
+
+    # Store the user's name in user_data
+    context.user_data['name'] = name
+
+    await update.message.reply_text("Por favor, digite sua senha:")
+    return PASSWORD
+
+
+async def password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores the user's password and proceeds with the registration."""
+    password = update.message.text
+
+    # Retrieve the name from user_data
+    name = context.user_data.get('name')
 
     # Retrieve the document number from user_data
     document_number = context.user_data.get('document_number')
 
-    # Store the user's name and document number in the database
+    # Store the user's name, document number, and hashed password in the database
     session = Session()
-    chat_id = user.id
-    user = User(chat_id=chat_id, name=name, document_number=document_number)
+    hashed_password = hashlib.sha256(password.encode()).hexdigest()  # Hash the password
+    user = User(name=name, document_number=document_number, password=hashed_password)
     session.add(user)
     session.commit()
     session.close()
 
-    await update.message.reply_text("Obrigado por usar nosso sistema!")
+    await update.message.reply_text("Usuário cadastrado com sucesso! Obrigado por usar nosso sistema!")
 
     return ConversationHandler.END
 
@@ -96,7 +112,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels and ends the conversation."""
     user = update.message.from_user
     logger.info("User %s canceled the conversation.", user.first_name)
-    await update.message.reply_text("Espero que esteja tudo bem. Até uma proxima vez!")
+    await update.message.reply_text("Operação cancelada pelo usuário. Até uma proxima vez!")
 
     # Close the database session
     session = context["session"]
@@ -186,7 +202,7 @@ async def name_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 def main() -> None:
     """Run the bot."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token("token here").build()
+    application = Application.builder().token("6118529672:AAHZBakVYjD0P28HHh9IaZ4qPBdds9LdHUs").build()
 
     # Add conversation handler with the states FULL NAME and DOCUMENT NUMBER
     conv_handler = ConversationHandler(
@@ -201,6 +217,7 @@ def main() -> None:
             DOCUMENT_NUMBER_UPDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, document_number_update)],
             NAME_UPDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, name_update)],
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, name)],
+            PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, password)]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
