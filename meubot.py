@@ -202,7 +202,7 @@ async def name_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 def main() -> None:
     """Run the bot."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token("6118529672:AAHZBakVYjD0P28HHh9IaZ4qPBdds9LdHUs").build()
+    application = Application.builder().token("token_here").build()
 
     # Add conversation handler with the states FULL NAME and DOCUMENT NUMBER
     conv_handler = ConversationHandler(
